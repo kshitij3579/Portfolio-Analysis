@@ -80,6 +80,24 @@ INFY.NS,10,1450.00,equity,
 | `account` | A free-text label. Not used in any calculation yet — it is there so you can group later. |
 | `manual_value` | Optional. See below. |
 
+### Editing these files in Excel or Numbers
+
+You can. The tool copes with what spreadsheet apps do to a CSV on the way out:
+the invisible marker Excel adds when saving as "CSV UTF-8", a semicolon
+separator instead of a comma, Windows or old-Mac line endings, and headings with
+odd capitalisation or stray spaces. Just make sure you **Save as CSV**, not as
+`.xlsx`.
+
+Two things a spreadsheet app can still break:
+
+- **Deleting or renaming the heading row.** If a required column goes missing,
+  the tool names the missing column and lists what it found instead.
+- **The `#` comment lines.** They are notes to you, not data. If your spreadsheet
+  scatters them into cells, delete them - nothing depends on them.
+
+A plain text editor (TextEdit in plain-text mode, VS Code, Notepad) avoids all of
+this if you prefer.
+
 **Check the symbol first.** Search it on finance.yahoo.com — if `INFY.NS` shows a
 price chart, the tool can fetch it. If a symbol does not resolve, the tool names
 it in a warning and continues with everything else rather than crashing.

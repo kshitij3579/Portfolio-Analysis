@@ -149,22 +149,56 @@ def print_heading(text):
 # =============================================================================
 
 def read_csv_rows(path):
-    """Read a CSV file into a list of dicts, ignoring '#' comments and blanks.
+    """Read a CSV file into (rows, column_names), ignoring '#' comments and blanks.
 
-    csv.DictReader cannot skip comments itself, so we filter the lines first and
-    hand it only the real content.
+    This is deliberately forgiving, because these files are meant to be edited by
+    hand - often in Excel or Numbers, which quietly reformat what they save.
+    Three things it tolerates:
+
+    * A byte order mark. Saving as "CSV UTF-8" puts three invisible bytes at the
+      front of the file, which would otherwise glue themselves to the first
+      column heading and turn "ticker" into a name nothing matches. Opening with
+      encoding="utf-8-sig" strips it if present and does no harm if it is not.
+    * A semicolon separator, which some spreadsheet apps use instead of a comma
+      depending on the computer's regional settings.
+    * Headings with odd capitalisation or stray spaces - "Ticker" and " ticker "
+      are both accepted.
+
+    csv.DictReader cannot skip comment lines itself, so we filter them out first
+    and hand it only the real content.
     """
     if not os.path.exists(path):
         sys.exit(f"ERROR: could not find {path}")
 
-    with open(path, newline="", encoding="utf-8") as handle:
+    with open(path, newline="", encoding="utf-8-sig") as handle:
         lines = [line for line in handle
                  if line.strip() and not line.lstrip().startswith("#")]
 
     if not lines:
         sys.exit(f"ERROR: {path} has no data rows")
 
-    return list(csv.DictReader(lines))
+    # Whichever separator appears more often in the heading row is the real one.
+    heading = lines[0]
+    delimiter = ";" if heading.count(";") > heading.count(",") else ","
+
+    reader = csv.DictReader(lines, delimiter=delimiter)
+    # Reading .fieldnames consumes the heading row; assigning to it then replaces
+    # those names for every row that follows.
+    reader.fieldnames = [(name or "").strip().lower()
+                         for name in (reader.fieldnames or [])]
+    return list(reader), reader.fieldnames
+
+
+def require_columns(path, found, needed):
+    """Stop with a readable message if the file is missing a column we need."""
+    missing = [name for name in needed if name not in found]
+    if missing:
+        sys.exit(
+            f"ERROR: {os.path.basename(path)} is missing the column(s): "
+            f"{', '.join(missing)}\n"
+            f"       The columns found were: {', '.join(found) or '(none)'}\n"
+            f"       Expected a heading row reading: {','.join(needed)}"
+        )
 
 
 def parse_number(text, default=None):
@@ -187,12 +221,15 @@ def load_holdings(path):
     being fetched - that is how mutual funds and anything else Yahoo does not
     cover get into the report.
     """
+    rows, columns = read_csv_rows(path)
+    require_columns(path, columns, ["ticker", "quantity", "avg_buy_price"])
+
     holdings = []
-    for line_number, row in enumerate(read_csv_rows(path), start=2):
+    for row_number, row in enumerate(rows, start=1):
         ticker = (row.get("ticker") or "").strip()
         if not ticker:
-            print(f"WARNING: skipping a row in holdings.csv with no ticker "
-                  f"(around line {line_number})")
+            print(f"WARNING: skipping data row {row_number} of "
+                  f"{os.path.basename(path)} - it has no ticker")
             continue
 
         quantity = parse_number(row.get("quantity"))
@@ -212,7 +249,12 @@ def load_holdings(path):
         })
 
     if not holdings:
-        sys.exit("ERROR: holdings.csv contained no usable rows")
+        sys.exit(
+            f"ERROR: {os.path.basename(path)} has a valid heading row but no "
+            f"usable holdings below it.\n"
+            f"       Every row was skipped - see the warnings above for why.\n"
+            f"       Each row needs a ticker, a quantity, and an avg_buy_price."
+        )
     return holdings
 
 
@@ -223,9 +265,12 @@ def load_sectors(path):
     Weights that do not add up to 1.0 are scaled so they do, with a warning -
     otherwise a typo would quietly distort every percentage in the report.
     """
+    rows, columns = read_csv_rows(path)
+    require_columns(path, columns, ["ticker", "sector"])
+
     mapping = {}
 
-    for row in read_csv_rows(path):
+    for row in rows:
         ticker = (row.get("ticker") or "").strip()
         sector = (row.get("sector") or "").strip()
         if not ticker or not sector:
