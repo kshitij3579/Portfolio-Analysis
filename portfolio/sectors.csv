@@ -1,0 +1,42 @@
+# sectors.csv - maps each ticker to the sector(s) and asset class it really rides on.
+# Lines starting with '#' and blank lines are ignored.
+#
+# ONE ROW PER (ticker, sector) PAIR. A ticker may appear on several rows, which
+# is how you split a holding across sectors with partial weights.
+#
+# ticker       Must match the ticker in holdings.csv exactly.
+# sector       Any label you like. Rows sharing a label are added together.
+#              Spell it consistently - "Pharma" and "Pharmaceuticals" are two
+#              different sectors as far as this tool is concerned.
+# weight       Share of THIS holding attributed to THIS sector. The weights for
+#              one ticker should add up to 1.0. If they do not, the tool warns
+#              you and scales them so they do.
+# asset_class  equity | precious_metals | multi_asset | debt | other
+#              Use the SAME asset class on every row belonging to a ticker.
+#              Unlike sector, asset class is not split - one bucket per holding.
+#
+# The sector named "Precious Metals" is special: the tool adds up every holding's
+# weighted exposure to it and warns if the total exceeds the threshold. That is
+# how a partly-bullion-driven business shows up in your gold/silver exposure.
+ticker,sector,weight,asset_class
+
+# Multi Commodity Exchange - a financial exchange, but a large slice of its
+# revenue tracks bullion trading volumes, so half its weight is parked in
+# precious metals. Change the split if you disagree - that is the point.
+MCX.NS,Precious Metals,0.5,equity
+MCX.NS,Financials,0.5,equity
+
+RAINBOWHSP.NS,Healthcare,1.0,equity
+ZYDUSLIFE.NS,Pharmaceuticals,1.0,equity
+
+# Gold and silver ETFs - pure bullion, one sector each.
+TATAGOLD.NS,Precious Metals,1.0,precious_metals
+SILVERBEES.NS,Precious Metals,1.0,precious_metals
+
+# PLACEHOLDER SPLIT - please correct from the latest factsheet.
+# A multi-asset fund holds equity, bullion and debt at the same time, so leaving
+# it in one "Multi-Asset" bucket would hide the gold you already own through it.
+# The numbers below are a rough stand-in, NOT the fund's real allocation.
+QUANTMULTIASSET,Diversified Equity,0.45,multi_asset
+QUANTMULTIASSET,Precious Metals,0.30,multi_asset
+QUANTMULTIASSET,Debt,0.25,multi_asset

@@ -1,0 +1,3 @@
+# The only third-party dependency. Everything else the tool uses (csv, json,
+# argparse, datetime) ships with Python itself.
+yfinance>=0.2.40

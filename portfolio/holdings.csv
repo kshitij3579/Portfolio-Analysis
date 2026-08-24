@@ -1,0 +1,24 @@
+# holdings.csv - your portfolio, maintained by hand.
+# Lines starting with '#' and blank lines are ignored, so you can leave notes here.
+#
+# ticker        Yahoo Finance symbol. NSE stocks and ETFs use the ".NS" suffix.
+#               For anything Yahoo does not cover (e.g. mutual funds), invent any
+#               short ID you like and fill in manual_value below.
+# quantity      Number of shares / ETF units / mutual-fund units you hold.
+# avg_buy_price Your average buy price per unit, in rupees.
+# account       Free-text label (equity, mutual_fund, spouse, ...). Not used in
+#               any calculation yet - it is there so you can group later.
+# manual_value  OPTIONAL. Total current value of the holding in rupees. If this
+#               cell has a number, the tool uses it directly and does NOT try to
+#               fetch a price. Leave it empty for anything Yahoo can price.
+ticker,quantity,avg_buy_price,account,manual_value
+MCX.NS,3,2721.00,equity,
+RAINBOWHSP.NS,4,1337.50,equity,
+ZYDUSLIFE.NS,4,1133.55,equity,
+TATAGOLD.NS,199,14.63,equity,
+SILVERBEES.NS,8,228.98,equity,
+# Quant Multi Asset Allocation Fund - yfinance has no data for Indian mutual
+# funds, so it is priced manually. Replace all three numbers below with your
+# real figures: quantity = units held, avg_buy_price = your average NAV, and
+# manual_value = units x latest NAV (both from your CAS or the fund page).
+QUANTMULTIASSET,1,10000.00,mutual_fund,10000.00
