@@ -62,6 +62,33 @@ network, so running the tool repeatedly in one sitting is instant. Change
 If a fetch fails but a cached price exists, the tool uses the old price and
 tells you how stale it is — better than silently dropping a holding.
 
+## Why prices differ from your broker
+
+Small differences from Groww or Zerodha are expected and usually not a bug.
+
+**These are closing prices, not live ones.** The tool reads the last completed
+trading session's close. Your broker shows the live price while the market is
+open. A 1-2% gap during a moving market is just the market having moved since
+the close. The report prints the exact session date it used, so you can check
+what you are comparing against.
+
+**Yahoo's free data is delayed**, typically by about 15 minutes for Indian
+exchanges. There is no free source that is truly live; that is what the paid
+feeds sell.
+
+**Prices are unadjusted closes.** The tool explicitly asks for the price the
+share actually traded at, not the dividend-adjusted figure Yahoo returns by
+default. The adjusted number is right for measuring returns over time and wrong
+for "what is this worth today", which is what your broker shows too.
+
+For a buy-and-hold portfolio this hardly matters: a percent or two of noise does
+not change whether a sector is 36% of your money. If you need an exact valuation
+for a particular moment, read it off your broker.
+
+Worth investigating instead: a holding whose price is stale by several sessions
+(the report names it), or a gap much larger than a couple of percent, which
+usually means the ticker resolves to a different security than you think.
+
 ## Adding a holding
 
 Open `holdings.csv` and add a row. Lines starting with `#` are ignored, so you

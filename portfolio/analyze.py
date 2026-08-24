@@ -390,7 +390,12 @@ def fetch_one_price(ticker):
     stock = yf.Ticker(ticker)
 
     for period in (PRICE_HISTORY_DAYS, PRICE_HISTORY_FALLBACK):
-        history = stock.history(period=period)
+        # auto_adjust=False matters. Left at its default of True, yfinance returns
+        # prices retro-adjusted for dividends and splits - useful for charting a
+        # return over time, but not the price the share actually changed hands at.
+        # For "what is my holding worth", the real traded close is the right
+        # number, and it is the one your broker shows.
+        history = stock.history(period=period, auto_adjust=False)
         if history.empty or "Close" not in history:
             continue
 
@@ -403,8 +408,18 @@ def fetch_one_price(ticker):
             continue   # nothing usable in this window; try the wider one
 
         price = float(closes.iloc[-1])
-        if is_usable_price(price):
-            return price
+        if not is_usable_price(price):
+            continue
+
+        # Record WHICH session this close belongs to. Without it there is no way
+        # to tell a price from an hour ago from one from last Friday, which makes
+        # any difference against your broker's screen impossible to explain.
+        try:
+            as_of = closes.index[-1].strftime("%Y-%m-%d")
+        except (AttributeError, ValueError):
+            as_of = None
+
+        return {"price": price, "as_of": as_of}
 
     return None
 
@@ -431,19 +446,19 @@ def get_prices(tickers, cache_path, force_refresh=False):
             entry = None
 
         if entry and not force_refresh and cache_age_minutes(entry) < CACHE_TTL_MINUTES:
-            prices[ticker] = entry["price"]
+            prices[ticker] = {"price": entry["price"], "as_of": entry.get("as_of")}
             served_from_cache += 1
             continue
 
         try:
-            price = fetch_one_price(ticker)
+            quote = fetch_one_price(ticker)
         except Exception as error:
             # Deliberately broad: network errors, Yahoo outages and yfinance's own
             # exceptions all mean the same thing here - carry on without this one.
             print(f"WARNING: could not fetch {ticker} ({type(error).__name__}: {error})")
-            price = None
+            quote = None
 
-        if price is None:
+        if quote is None:
             print(f"WARNING: no price data for {ticker}. Check the symbol resolves "
                   f"on finance.yahoo.com (NSE symbols need the '.NS' suffix), or "
                   f"give the row a manual_value in holdings.csv.")
@@ -452,13 +467,14 @@ def get_prices(tickers, cache_path, force_refresh=False):
                 age_hours = cache_age_minutes(entry) / 60.0
                 print(f"         using the last cached price for {ticker} "
                       f"({age_hours:.1f} hours old)")
-                prices[ticker] = entry["price"]
+                prices[ticker] = {"price": entry["price"], "as_of": entry.get("as_of")}
                 served_stale += 1
             continue
 
-        prices[ticker] = price
+        prices[ticker] = quote
         cache[ticker] = {
-            "price": price,
+            "price": quote["price"],
+            "as_of": quote["as_of"],
             "fetched_at": datetime.now(timezone.utc).isoformat(),
         }
         fetched_now += 1
@@ -496,14 +512,16 @@ def build_positions(holdings, sectors, prices):
             current_value = holding["manual_value"]
             current_price = current_value / quantity if quantity else 0.0
             price_source = "manual"
+            price_as_of = None
         else:
-            price = prices.get(ticker)
-            if price is None:
+            quote = prices.get(ticker)
+            if quote is None:
                 unpriced.append(ticker)
                 continue
-            current_price = price
-            current_value = price * quantity
+            current_price = quote["price"]
+            current_value = current_price * quantity
             price_source = "market"
+            price_as_of = quote.get("as_of")
 
         invested = quantity * holding["avg_buy_price"]
         gain = current_value - invested
@@ -528,6 +546,7 @@ def build_positions(holdings, sectors, prices):
             "gain": round(gain, 2),
             "gain_pct": round(gain_pct, 2),
             "price_source": price_source,
+            "price_as_of": price_as_of,
             "asset_class": mapping["asset_class"],
             "sector_weights": mapping["weights"],
         })
@@ -656,6 +675,35 @@ def find_warnings(positions, sector_rows, total_value):
 # SECTION 6: OUTPUT
 # =============================================================================
 
+def describe_price_dates(positions):
+    """Explain which trading session the fetched prices belong to.
+
+    This exists because the commonest 'is it broken?' moment is seeing a price
+    here that differs from a broker app by a percent or two. Almost always the
+    answer is that these are closing prices and the broker is showing a live one.
+    Printing the date turns a mystery into an obvious, checkable fact.
+    """
+    dates = sorted({p["price_as_of"] for p in positions
+                    if p["price_source"] == "market" and p["price_as_of"]})
+    if not dates:
+        return []
+
+    lines = []
+    if len(dates) == 1:
+        lines.append(f"  Fetched prices are closing prices from the trading "
+                     f"session of {dates[0]}.")
+    else:
+        lines.append(f"  Fetched prices are closing prices, and not all from the "
+                     f"same session ({dates[0]} to {dates[-1]}):")
+        for position in positions:
+            if position["price_source"] == "market" and position["price_as_of"] != dates[-1]:
+                lines.append(f"    {position['ticker']} is priced as of "
+                             f"{position['price_as_of'] or 'an unknown date'}")
+    lines.append("  If your broker shows something different, it is likely quoting "
+                 "a live price.")
+    return lines
+
+
 def print_report(positions, totals, sector_rows, asset_rows, warnings, unpriced,
                  cache_stats):
     """Print the full terminal report."""
@@ -724,6 +772,9 @@ def print_report(positions, totals, sector_rows, asset_rows, warnings, unpriced,
               f"{', '.join(unpriced)}")
 
     print()
+    for line in describe_price_dates(positions):
+        print(line)
+
     stale_note = (f", {cache_stats['stale_fallback']} reused past the cache expiry "
                   f"because the fetch failed" if cache_stats["stale_fallback"] else "")
     print(f"  Prices: {cache_stats['fetched']} fetched, "
