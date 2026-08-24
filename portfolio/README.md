@@ -1,6 +1,7 @@
 # NSE Portfolio Analyzer
 
-A small, read-only command-line tool that shows where your money actually sits:
+A small, read-only tool — a local web app and a command-line report — that shows
+where your money actually sits:
 per holding, per sector, and per asset class — then warns you when you are more
 concentrated than you meant to be.
 
@@ -21,46 +22,47 @@ needed.
 Holdings are read from a CSV you maintain by hand. Nothing is fetched from a
 broker account.
 
-## Setup
+## Two ways to use it
 
-You need Python 3.8 or newer.
+**The app** (easier): double-click `Portfolio Analyzer.command` in Finder. It
+sets itself up the first time, then opens in your browser. Edit holdings in
+forms, edit the sector map, read the report with charts. Close the Terminal
+window it opens, or press Ctrl+C in it, to stop.
+
+The first double-click may be blocked by macOS with "cannot be opened because it
+is from an unidentified developer". Right-click the file, choose **Open**, then
+**Open** again. You only do this once.
+
+**The terminal** (unchanged): still there, still works, still the thing to reach
+for if you want the raw numbers or JSON.
 
 ```bash
 cd portfolio
-
-# Optional but recommended: keep dependencies out of your system Python.
-python3 -m venv .venv
-source .venv/bin/activate          # Windows: .venv\Scripts\activate
-
+python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-```
 
-## Running it
-
-```bash
 python analyze.py               # the report
-python analyze.py --refresh     # ignore cached prices, fetch fresh ones
-python analyze.py --json        # same numbers, as JSON
+python analyze.py --refresh     # ignore cached prices
+python analyze.py --json        # same numbers as JSON
 ```
 
-That is the whole interface. No server, no background process, no scheduling.
+Both read and write the same two CSV files and share the same calculation code,
+so they can never disagree about a number. Edit in the app, read in the terminal,
+or the other way round.
 
-| Flag | What it does |
-| --- | --- |
-| `--refresh` | Skips the cache and re-fetches every price. |
-| `--json` | Prints JSON to stdout instead of tables. Warnings go to stderr, so `python analyze.py --json > out.json` gives you a clean file. |
-| `--holdings PATH` | Use a different holdings file. |
-| `--sectors PATH` | Use a different sector map. |
+## What the app does and does not do
 
-### About the price cache
+It writes to exactly two files, `holdings.csv` and `sectors.csv`, because that is
+what editing your holdings in a browser means. It has no broker connection, no
+credentials, and no way to place a trade — unchanged from before.
 
-Fetched prices are written to `.price_cache.json` next to the script, with a
-timestamp. A price younger than 60 minutes is reused instead of hitting the
-network, so running the tool repeatedly in one sitting is instant. Change
-`CACHE_TTL_MINUTES` at the top of `analyze.py` to adjust, or pass `--refresh`.
+It listens on `127.0.0.1`, which means the address works on this computer and
+nowhere else. Nobody on your wifi, and nobody on the internet, can reach it. Your
+holdings never leave your Mac.
 
-If a fetch fails but a cached price exists, the tool uses the old price and
-tells you how stale it is — better than silently dropping a holding.
+Saving from the app rewrites the CSV, which keeps the explanatory comments at the
+top of the file but drops any comments you have written further down between
+rows. Notes at the top are safe.
 
 ## Why prices differ from your broker
 
@@ -223,7 +225,9 @@ are.
 
 ## Reading the code
 
-`analyze.py` is one file, split into seven labelled sections:
+There are two files worth reading, and only one of them does any thinking.
+
+`analyze.py` is the engine plus the terminal report, split into labelled sections:
 
 1. **Configuration** — every threshold and file path.
 2. **Formatting helpers** — rupee formatting, table rendering.
@@ -233,9 +237,18 @@ are.
 6. **Output** — the terminal report and the JSON.
 7. **Entry point** — argument parsing, wiring it together.
 
-Sections 3–5 are plain functions that take data and return data, so a future
-`screener.py` can `from analyze import load_holdings, load_sectors, get_prices`
-and reuse them without any restructuring.
+Sections 3–5 are plain functions that take data and return data. `run_analysis()`
+ties them together and hands back the whole result as one dictionary.
+
+`app.py` is the web interface, and does no arithmetic at all. It calls
+`analyze.run_analysis()` and renders what comes back. That is deliberate: if the
+page and the terminal ever disagreed about a number, one would be wrong and you
+would have no way to tell which. Sharing one engine makes disagreement
+impossible. The pages themselves are in `templates/`, the styling in
+`static/style.css`.
+
+The same seam means a future `screener.py` can `from analyze import
+load_holdings, load_sectors, get_prices` without any restructuring.
 
 ## Not built yet
 

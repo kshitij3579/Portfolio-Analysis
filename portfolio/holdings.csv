@@ -12,17 +12,9 @@
 #               cell has a number, the tool uses it directly and does NOT try to
 #               fetch a price. Leave it empty for anything Yahoo can price.
 ticker,quantity,avg_buy_price,account,manual_value
-MCX.NS,3,2721.00,equity,
-# NOTE: RAINBOWHSP.NS returns a 404 from Yahoo - that symbol does not exist
-# there. RAINBOW.NS is the likely correct one for Rainbow Children's
-# Medicare, but it is UNVERIFIED. Confirm it by searching the company name
-# on finance.yahoo.com and using whatever symbol the result page shows.
-RAINBOW.NS,4,1337.50,equity,
+MCX.NS,3,2721,equity,
+RAINBOW.NS,4,1337.5,equity,
 ZYDUSLIFE.NS,4,1133.55,equity,
 TATAGOLD.NS,199,14.63,equity,
 SILVERBEES.NS,8,228.98,equity,
-# Quant Multi Asset Allocation Fund - yfinance has no data for Indian mutual
-# funds, so it is priced manually. Replace all three numbers below with your
-# real figures: quantity = units held, avg_buy_price = your average NAV, and
-# manual_value = units x latest NAV (both from your CAS or the fund page).
-QUANTMULTIASSET,1,10000.00,mutual_fund,10000.00
+QUANTMULTIASSET,1,10000,mutual_fund,10000

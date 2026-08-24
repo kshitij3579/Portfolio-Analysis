@@ -1,7 +1,9 @@
 # Fetched prices, rebuilt automatically. Not worth committing.
 .price_cache.json
 
-__pycache__/
-*.pyc
+# The private library folder the launcher builds on first run.
 .venv/
 venv/
+
+__pycache__/
+*.pyc

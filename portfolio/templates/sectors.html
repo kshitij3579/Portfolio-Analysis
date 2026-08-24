@@ -1,0 +1,109 @@
+{% extends "base.html" %}
+{% block title %}Sectors{% endblock %}
+{% block content %}
+
+{% if saved %}<div class="panel ok"><strong>Saved.</strong>
+  <a href="{{ url_for('dashboard') }}">See the updated report</a></div>{% endif %}
+
+{% if unmapped %}
+  <div class="panel warn">
+    <strong>Held but not mapped:</strong> {{ unmapped | join(', ') }}.
+    Until you add a row for each, they are counted as
+    <em>Unknown</em> and will not show up in the right sector.
+  </div>
+{% endif %}
+
+{% if error %}
+  <div class="panel warn"><strong>This file could not be read.</strong>
+    <p>{{ error }}</p>
+    <p>The table below starts empty. Filling it in and saving will rewrite the file.</p>
+  </div>
+{% endif %}
+
+{% if notices %}
+  <div class="panel warn">
+    <strong>Check these:</strong>
+    <ul>{% for n in notices %}<li>{{ n }}</li>{% endfor %}</ul>
+  </div>
+{% endif %}
+
+<section class="panel">
+  <h2>What each holding really is</h2>
+  <p class="fineprint">
+    <strong>One row per ticker per sector.</strong> A holding that belongs
+    entirely to one sector needs a single row with weight <code>1</code>. To
+    split a holding, give it several rows whose weights add up to
+    <code>1</code> — for example MCX at <code>0.5</code> to
+    {{ metals_sector }} and <code>0.5</code> to Financials, because a
+    commodity exchange's earnings partly track bullion volumes. Weights that do
+    not add to 1 are scaled to fit, and you will be told.
+  </p>
+  <p class="fineprint">
+    <strong>Sector splits; asset class does not.</strong> Use the same asset
+    class on every row for a ticker. And note that
+    <code>{{ metals_sector }}</code> is the one sector name the warnings know
+    by name — every holding's weighted share of it is added up for the combined
+    bullion check.
+  </p>
+
+  <form method="post">
+    <div class="scroll">
+    <table class="editor" id="sectors-table">
+      <thead><tr>
+        <th>Ticker</th><th>Sector</th><th>Weight</th><th>Asset class</th><th></th>
+      </tr></thead>
+      <tbody>
+      {% for row in rows %}
+        <tr>
+          <td><input name="ticker" value="{{ row.ticker }}" required></td>
+          <td><input name="sector" value="{{ row.sector }}" list="sector-names" required></td>
+          <td><input name="weight" value="{{ '%g'|format(row.weight) }}"
+                     type="number" step="0.05" min="0" max="1"></td>
+          <td>
+            <select name="asset_class">
+              {% for choice in ['equity','precious_metals','multi_asset','debt','other'] %}
+                <option value="{{ choice }}" {{ 'selected' if row.asset_class == choice }}>{{ choice }}</option>
+              {% endfor %}
+            </select>
+          </td>
+          <td><button type="button" class="link-btn" onclick="removeRow(this)">remove</button></td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    </div>
+
+    <datalist id="sector-names">
+      {% for row in rows | map(attribute='sector') | unique | sort %}
+        <option value="{{ row }}">
+      {% endfor %}
+    </datalist>
+
+    <div class="actions">
+      <button type="button" class="secondary" onclick="addRow()">Add a row</button>
+      <button type="submit">Save</button>
+    </div>
+  </form>
+</section>
+
+<script>
+function addRow() {
+  const body = document.querySelector('#sectors-table tbody');
+  const template = body.rows[0];
+  if (!template) return;
+  const row = template.cloneNode(true);
+  row.querySelectorAll('input').forEach(input => input.value = '');
+  row.querySelector('input[name="weight"]').value = '1';
+  body.appendChild(row);
+  row.querySelector('input').focus();
+}
+function removeRow(button) {
+  const body = button.closest('tbody');
+  if (body.rows.length === 1) {
+    button.closest('tr').querySelectorAll('input').forEach(i => i.value = '');
+    return;
+  }
+  button.closest('tr').remove();
+}
+</script>
+{% endblock %}

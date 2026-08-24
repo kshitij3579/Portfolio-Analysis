@@ -1,3 +1,6 @@
-# The only third-party dependency. Everything else the tool uses (csv, json,
-# argparse, datetime) ships with Python itself.
+# Price data. The only source the tool talks to, and it is free.
 yfinance>=0.2.40
+
+# The local web interface (app.py). The command-line tool, analyze.py, does not
+# need this - it runs on Python's own libraries alone.
+flask>=3.0

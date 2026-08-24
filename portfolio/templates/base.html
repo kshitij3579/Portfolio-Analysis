@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Portfolio Analyzer{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">Portfolio Analyzer</div>
+    <nav>
+      <a href="{{ url_for('dashboard') }}"
+         class="{{ 'active' if request.endpoint == 'dashboard' }}">Report</a>
+      <a href="{{ url_for('holdings') }}"
+         class="{{ 'active' if request.endpoint == 'holdings' }}">Holdings</a>
+      <a href="{{ url_for('sectors') }}"
+         class="{{ 'active' if request.endpoint == 'sectors' }}">Sectors</a>
+      <a href="{{ url_for('refresh') }}" class="ghost">Refresh prices</a>
+    </nav>
+  </header>
+
+  <main>
+    {% block content %}{% endblock %}
+  </main>
+
+  <footer>
+    Read-only. This tool cannot place, change or cancel a trade, and has no
+    broker connection. Running on this computer only.
+  </footer>
+</body>
+</html>

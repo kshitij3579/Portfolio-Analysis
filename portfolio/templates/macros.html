@@ -1,0 +1,32 @@
+{#
+  bars() - a horizontal bar chart built from plain divs.
+
+  Bar width is the true percentage of the portfolio (a 36% slice fills 36% of
+  the track), rather than being stretched so the biggest bar fills the row.
+  Stretching would look better and lie: it would make a 5% holding and a 40%
+  holding look comparable, and it would put the threshold marker in a
+  meaningless place. The whole tool exists to show real proportions.
+#}
+{% macro bars(rows, key, threshold) %}
+<div class="chart">
+  {% for row in rows %}
+    {% set over = threshold and row.pct > threshold %}
+    <div class="bar-row">
+      <div class="bar-label">{{ row[key] }}</div>
+      <div class="bar-track">
+        {% if threshold %}
+          {# The limit line, drawn behind the bar so a breach visibly crosses it #}
+          <div class="bar-limit" style="left: {{ threshold }}%"
+               title="limit {{ threshold }}%"></div>
+        {% endif %}
+        <div class="bar-fill {{ 'over' if over }}"
+             style="width: {{ [row.pct, 100] | min }}%"></div>
+      </div>
+      <div class="bar-value">
+        {{ '%.1f'|format(row.pct) }}%
+        <small>{{ row.value | inr }}</small>
+      </div>
+    </div>
+  {% endfor %}
+</div>
+{% endmacro %}

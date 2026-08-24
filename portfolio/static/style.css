@@ -1,0 +1,180 @@
+/* Portfolio Analyzer - a single stylesheet, no frameworks, no downloads.
+   Colours are defined once as variables at the top, then reused. Change a value
+   here and it changes everywhere it is used. */
+
+:root {
+  --bg: #f6f7f9;
+  --panel: #ffffff;
+  --ink: #1c1f23;
+  --muted: #6b7280;
+  --line: #e3e6ea;
+  --accent: #2b5fd9;
+  --up: #12805c;
+  --down: #c0392b;
+  --warn-bg: #fff7e6;
+  --warn-line: #e0a800;
+  --alert-bg: #fdeceb;
+  --ok-bg: #eaf6f0;
+  --radius: 10px;
+}
+
+/* Follow the system setting, so it is readable in a dark-themed browser too. */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #14171a; --panel: #1c2024; --ink: #e8eaed; --muted: #9aa3ad;
+    --line: #2c3238; --accent: #6b9bff; --up: #35c48c; --down: #ff7a6b;
+    --warn-bg: #2e2718; --warn-line: #b8860b;
+    --alert-bg: #33201f; --ok-bg: #172b24;
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font: 15px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+}
+
+/* ---------- top bar ---------- */
+.topbar {
+  display: flex; align-items: center; justify-content: space-between;
+  flex-wrap: wrap; gap: 12px;
+  padding: 14px 22px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+}
+.brand { font-weight: 650; letter-spacing: -0.01em; }
+.topbar nav { display: flex; gap: 6px; flex-wrap: wrap; }
+.topbar nav a {
+  padding: 6px 12px; border-radius: 999px;
+  color: var(--muted); text-decoration: none; font-size: 14px;
+}
+.topbar nav a:hover { background: var(--bg); color: var(--ink); }
+.topbar nav a.active { background: var(--accent); color: #fff; }
+.topbar nav a.ghost { border: 1px solid var(--line); }
+
+main { max-width: 1040px; margin: 22px auto; padding: 0 18px; }
+
+/* ---------- panels ---------- */
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 18px 20px;
+  margin-bottom: 18px;
+}
+.panel h2 { margin: 0 0 10px; font-size: 16px; letter-spacing: -0.01em; }
+.panel.alert { background: var(--alert-bg); border-color: var(--down); }
+.panel.warn  { background: var(--warn-bg);  border-color: var(--warn-line); }
+.panel.ok    { background: var(--ok-bg); }
+.panel.quiet { color: var(--muted); font-size: 14px; }
+
+.fineprint { color: var(--muted); font-size: 13.5px; margin: 6px 0 14px; }
+.warn-text { color: var(--down); }
+
+/* ---------- warnings list ---------- */
+.warnings { list-style: none; margin: 0; padding: 0; }
+.warnings li {
+  display: flex; align-items: baseline; gap: 10px;
+  padding: 7px 0; border-bottom: 1px solid var(--line);
+}
+.warnings li:last-child { border-bottom: 0; }
+.badge {
+  flex: none; min-width: 62px; text-align: center;
+  background: var(--down); color: #fff;
+  border-radius: 999px; padding: 2px 8px;
+  font-size: 12.5px; font-weight: 600; font-variant-numeric: tabular-nums;
+}
+
+/* ---------- headline numbers ---------- */
+.totals { display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 18px; }
+.stat {
+  flex: 1 1 200px;
+  background: var(--panel); border: 1px solid var(--line);
+  border-radius: var(--radius); padding: 14px 16px;
+}
+.stat .label { display: block; color: var(--muted); font-size: 13px; }
+.stat .value {
+  display: block; margin-top: 3px;
+  font-size: 21px; font-weight: 620; font-variant-numeric: tabular-nums;
+}
+.stat .value small { font-size: 14px; font-weight: 500; }
+.up { color: var(--up); }
+.down { color: var(--down); }
+
+/* ---------- bar chart ---------- */
+.chart { display: flex; flex-direction: column; gap: 9px; }
+.bar-row { display: flex; align-items: center; gap: 12px; }
+.bar-label { flex: 0 0 150px; font-size: 14px; }
+.bar-track {
+  position: relative; flex: 1 1 auto; height: 22px;
+  background: var(--bg); border-radius: 5px; overflow: hidden;
+}
+.bar-fill {
+  height: 100%; background: var(--accent);
+  border-radius: 5px 0 0 5px;
+  transition: width .2s ease;
+}
+.bar-fill.over { background: var(--down); }
+/* The limit line sits inside the track, so a bar that breaches it visibly
+   crosses the line rather than just being a different colour. */
+.bar-limit {
+  position: absolute; top: 0; bottom: 0; width: 2px;
+  background: var(--warn-line); opacity: .85; z-index: 2;
+}
+.bar-value {
+  flex: 0 0 150px; text-align: right;
+  font-size: 14px; font-variant-numeric: tabular-nums;
+}
+.bar-value small { color: var(--muted); margin-left: 6px; }
+
+/* ---------- tables ---------- */
+.scroll { overflow-x: auto; }        /* wide tables scroll, the page never does */
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+th, td { padding: 8px 10px; text-align: left; border-bottom: 1px solid var(--line); }
+th { color: var(--muted); font-weight: 600; font-size: 13px; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+.tag {
+  font-size: 11px; color: var(--muted);
+  border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px;
+  margin-left: 5px;
+}
+
+/* ---------- editable tables ---------- */
+.editor input, .editor select {
+  width: 100%; min-width: 92px;
+  padding: 6px 8px;
+  border: 1px solid var(--line); border-radius: 6px;
+  background: var(--bg); color: var(--ink);
+  font: inherit; font-size: 14px;
+}
+.editor input:focus, .editor select:focus {
+  outline: 2px solid var(--accent); outline-offset: -1px;
+}
+
+.actions { display: flex; gap: 10px; margin-top: 16px; }
+button {
+  padding: 9px 18px; border: 0; border-radius: 8px;
+  background: var(--accent); color: #fff;
+  font: inherit; font-weight: 600; cursor: pointer;
+}
+button.secondary { background: var(--bg); color: var(--ink); border: 1px solid var(--line); }
+button:hover { opacity: .9; }
+.link-btn {
+  background: none; color: var(--muted); border: 0;
+  padding: 4px; font-weight: 500; font-size: 13px; text-decoration: underline;
+}
+.link-btn:hover { color: var(--down); }
+
+details summary { cursor: pointer; }
+code {
+  background: var(--bg); border: 1px solid var(--line);
+  border-radius: 4px; padding: 1px 5px; font-size: 13px;
+}
+
+footer {
+  max-width: 1040px; margin: 0 auto 40px; padding: 0 18px;
+  color: var(--muted); font-size: 13px;
+}

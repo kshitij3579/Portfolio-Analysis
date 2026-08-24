@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% block title %}Holdings{% endblock %}
+{% block content %}
+
+{% if saved %}<div class="panel ok"><strong>Saved.</strong>
+  <a href="{{ url_for('dashboard') }}">See the updated report</a></div>{% endif %}
+
+{% if error %}
+  <div class="panel warn"><strong>This file could not be read.</strong>
+    <p>{{ error }}</p>
+    <p>The table below starts empty. Filling it in and saving will rewrite the file.</p>
+  </div>
+{% endif %}
+
+{% if notices %}
+  <div class="panel warn">
+    <strong>Check these:</strong>
+    <ul>{% for n in notices %}<li>{{ n }}</li>{% endfor %}</ul>
+  </div>
+{% endif %}
+
+<section class="panel">
+  <h2>Your holdings</h2>
+  <p class="fineprint">
+    Leave <strong>manual value</strong> empty for anything Yahoo can price. Fill it
+    in only for holdings it cannot — Indian mutual funds, mainly — and put the
+    total current value of that holding there, not a per-unit price.
+    NSE tickers need the <code>.NS</code> ending, like <code>TCS.NS</code>.
+  </p>
+
+  <form method="post">
+    <div class="scroll">
+    <table class="editor" id="holdings-table">
+      <thead><tr>
+        <th>Ticker</th><th>Quantity</th><th>Avg buy price</th>
+        <th>Account</th><th>Manual value</th><th></th>
+      </tr></thead>
+      <tbody>
+      {% for row in rows %}
+        <tr>
+          <td><input name="ticker" value="{{ row.ticker }}" required></td>
+          <td><input name="quantity" value="{{ '%g'|format(row.quantity) }}" inputmode="decimal"></td>
+          <td><input name="avg_buy_price" value="{{ '%g'|format(row.avg_buy_price) }}" inputmode="decimal"></td>
+          <td><input name="account" value="{{ row.account }}"></td>
+          <td><input name="manual_value" inputmode="decimal"
+                     value="{{ '%g'|format(row.manual_value) if row.manual_value is not none else '' }}"></td>
+          <td><button type="button" class="link-btn" onclick="removeRow(this)">remove</button></td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    </div>
+
+    <div class="actions">
+      <button type="button" class="secondary" onclick="addRow()">Add a holding</button>
+      <button type="submit">Save</button>
+    </div>
+  </form>
+</section>
+
+<script>
+// Adding a row copies the first row and blanks it. Removing a row deletes it
+// outright; the form simply submits fewer rows and the file is rewritten to
+// match. Nothing is saved until you press Save.
+function addRow() {
+  const body = document.querySelector('#holdings-table tbody');
+  const template = body.rows[0];
+  if (!template) return;
+  const row = template.cloneNode(true);
+  row.querySelectorAll('input').forEach(input => input.value = '');
+  body.appendChild(row);
+  row.querySelector('input').focus();
+}
+function removeRow(button) {
+  const body = button.closest('tbody');
+  if (body.rows.length === 1) {          // keep one row so addRow has a template
+    button.closest('tr').querySelectorAll('input').forEach(i => i.value = '');
+    return;
+  }
+  button.closest('tr').remove();
+}
+</script>
+{% endblock %}

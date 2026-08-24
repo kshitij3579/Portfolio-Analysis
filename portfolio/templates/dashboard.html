@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+{% from "macros.html" import bars %}
+{% block content %}
+
+{% if error %}
+  <div class="panel warn"><strong>Nothing to report.</strong><p>{{ error }}</p>
+  <p><a href="{{ url_for('holdings') }}">Edit your holdings</a> to get started.</p></div>
+{% else %}
+
+{# ---- Concentration warnings come first. They are the point of the tool. ---- #}
+<section class="panel {{ 'alert' if result.warnings else 'ok' }}">
+  <h2>Concentration</h2>
+  {% if result.warnings %}
+    <ul class="warnings">
+      {% for w in result.warnings %}
+        <li>
+          <span class="badge">{{ '%.1f'|format(w.pct) }}%</span>
+          {{ w.message }}
+        </li>
+      {% endfor %}
+    </ul>
+    <p class="fineprint">
+      Limits: single holding {{ thresholds.holding }}%, sector
+      {{ thresholds.sector }}%, precious metals {{ thresholds.metals }}%.
+      Change them at the top of <code>analyze.py</code>.
+      With only a few holdings the single-holding limit will trip constantly —
+      that is arithmetic, not a crisis.
+    </p>
+  {% else %}
+    <p>No limit breached.</p>
+  {% endif %}
+</section>
+
+{# ---- Headline numbers ---- #}
+<section class="totals">
+  <div class="stat">
+    <span class="label">Current value</span>
+    <span class="value">{{ result.totals.total_value | inr }}</span>
+  </div>
+  <div class="stat">
+    <span class="label">Invested</span>
+    <span class="value">{{ result.totals.total_invested | inr }}</span>
+  </div>
+  <div class="stat">
+    <span class="label">Gain / loss</span>
+    <span class="value {{ 'up' if result.totals.total_gain >= 0 else 'down' }}">
+      {{ result.totals.total_gain | inr }}
+      <small>({{ '%+.2f'|format(result.totals.total_gain_pct) }}%)</small>
+    </span>
+  </div>
+</section>
+
+{# ---- The two concentration charts ---- #}
+<section class="panel">
+  <h2>By sector</h2>
+  <p class="fineprint">Holdings tagged with partial weights are split across
+     sectors, so a part-bullion business shows up in bullion exposure.</p>
+  {{ bars(result.by_sector, 'sector', thresholds.sector) }}
+</section>
+
+<section class="panel">
+  <h2>By asset class</h2>
+  <p class="fineprint">Each holding sits in exactly one asset class — this is
+     not split. Compare it with the sector chart above: a gap between the two
+     is exposure you hold indirectly.</p>
+  {{ bars(result.by_asset_class, 'asset_class', None) }}
+</section>
+
+{# ---- Detail ---- #}
+<section class="panel">
+  <h2>Holdings</h2>
+  <div class="scroll">
+  <table>
+    <thead><tr>
+      <th>Ticker</th><th class="num">Qty</th><th class="num">Price</th>
+      <th class="num">Value</th><th class="num">Invested</th>
+      <th class="num">Gain/loss</th><th class="num">Gain %</th>
+      <th class="num">% of portfolio</th>
+    </tr></thead>
+    <tbody>
+    {% for p in result.positions %}
+      <tr>
+        <td>
+          {{ p.ticker }}
+          {% if p.price_source == 'manual' %}<span class="tag">manual</span>{% endif %}
+        </td>
+        <td class="num">{{ '%g'|format(p.quantity) }}</td>
+        <td class="num">{{ p.current_price | inr }}</td>
+        <td class="num">{{ p.current_value | inr }}</td>
+        <td class="num">{{ p.invested | inr }}</td>
+        <td class="num {{ 'up' if p.gain >= 0 else 'down' }}">{{ p.gain | inr }}</td>
+        <td class="num {{ 'up' if p.gain >= 0 else 'down' }}">{{ '%+.2f'|format(p.gain_pct) }}%</td>
+        <td class="num">{{ '%.2f'|format(p.pct_of_portfolio) }}%</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</section>
+
+{# ---- Anything the run wants to tell you ---- #}
+{% set dates = result.positions | selectattr('price_as_of') | map(attribute='price_as_of') | unique | list %}
+<section class="panel quiet">
+  {% if dates %}
+    <p>Fetched prices are closing prices from
+      {% if dates|length == 1 %}the session of {{ dates[0] }}{% else %}
+        sessions between {{ dates|min }} and {{ dates|max }}{% endif %}.
+      A broker app showing something a little different is quoting a live price.</p>
+  {% endif %}
+  {% if result.unpriced_tickers %}
+    <p class="warn-text">Left out of every number above, because no price was
+       found: {{ result.unpriced_tickers | join(', ') }}</p>
+  {% endif %}
+  {% if result.notices %}
+    <details>
+      <summary>{{ result.notices | length }} message(s) from this run</summary>
+      <ul>{% for n in result.notices %}<li>{{ n }}</li>{% endfor %}</ul>
+    </details>
+  {% endif %}
+</section>
+
+{% endif %}
+{% endblock %}

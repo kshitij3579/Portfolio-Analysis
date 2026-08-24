@@ -80,6 +80,18 @@ PRICE_HISTORY_FALLBACK = "1mo"
 # Pure text formatting - no calculations, no data loading.
 # =============================================================================
 
+# Warnings collected during a run. The command-line tool prints them as they
+# happen; the web app reads them out of here to show on the page. notice() does
+# both, so neither has to know about the other.
+NOTICES = []
+
+
+def notice(message):
+    """Record a warning for the user, and print it for anyone watching a terminal."""
+    NOTICES.append(message)
+    print(message)
+
+
 def format_inr(amount):
     """Format a number as rupees using Indian digit grouping.
 
@@ -237,18 +249,18 @@ def load_holdings(path):
     for row_number, row in enumerate(rows, start=1):
         ticker = (row.get("ticker") or "").strip()
         if not ticker:
-            print(f"WARNING: skipping data row {row_number} of "
+            notice(f"WARNING: skipping data row {row_number} of "
                   f"{os.path.basename(path)} - it has no ticker")
             continue
 
         quantity = parse_number(row.get("quantity"))
         avg_buy_price = parse_number(row.get("avg_buy_price"))
         if quantity is None or avg_buy_price is None:
-            print(f"WARNING: skipping {ticker} - quantity or avg_buy_price is "
+            notice(f"WARNING: skipping {ticker} - quantity or avg_buy_price is "
                   f"missing or not a number")
             continue
         if not math.isfinite(quantity) or not math.isfinite(avg_buy_price):
-            print(f"WARNING: skipping {ticker} - quantity or avg_buy_price is "
+            notice(f"WARNING: skipping {ticker} - quantity or avg_buy_price is "
                   f"not a usable number")
             continue
 
@@ -256,7 +268,7 @@ def load_holdings(path):
         # total it entered, so reject it and fall back to fetching a price.
         manual_value = parse_number(row.get("manual_value"))
         if manual_value is not None and not is_usable_price(manual_value):
-            print(f"WARNING: ignoring the manual_value on {ticker} - "
+            notice(f"WARNING: ignoring the manual_value on {ticker} - "
                   f"'{row.get('manual_value')}' is not a positive number")
             manual_value = None
 
@@ -305,7 +317,7 @@ def load_sectors(path):
         # Asset class is one bucket per ticker, so later rows must agree with the
         # first one. Disagreement is a typo worth surfacing.
         if entry["asset_class"] != asset_class:
-            print(f"WARNING: {ticker} has conflicting asset classes in sectors.csv "
+            notice(f"WARNING: {ticker} has conflicting asset classes in sectors.csv "
                   f"('{entry['asset_class']}' and '{asset_class}'); using "
                   f"'{entry['asset_class']}'")
 
@@ -317,12 +329,12 @@ def load_sectors(path):
     for ticker, entry in mapping.items():
         total = sum(entry["weights"].values())
         if total <= 0:
-            print(f"WARNING: {ticker} has zero total sector weight in sectors.csv; "
+            notice(f"WARNING: {ticker} has zero total sector weight in sectors.csv; "
                   f"treating it as 100% {UNKNOWN_SECTOR}")
             entry["weights"] = {UNKNOWN_SECTOR: 1.0}
             continue
         if abs(total - 1.0) > 0.001:
-            print(f"WARNING: sector weights for {ticker} add up to {total:.2f}, "
+            notice(f"WARNING: sector weights for {ticker} add up to {total:.2f}, "
                   f"not 1.00 - scaling them to fit")
             entry["weights"] = {s: w / total for s, w in entry["weights"].items()}
 
@@ -357,7 +369,7 @@ def load_cache(path):
         with open(path, encoding="utf-8") as handle:
             return json.load(handle)
     except (json.JSONDecodeError, OSError):
-        print("WARNING: price cache was unreadable and will be rebuilt")
+        notice("WARNING: price cache was unreadable and will be rebuilt")
         return {}
 
 
@@ -367,7 +379,7 @@ def save_cache(path, cache):
         with open(path, "w", encoding="utf-8") as handle:
             json.dump(cache, handle, indent=2)
     except OSError as error:
-        print(f"WARNING: could not write the price cache ({error})")
+        notice(f"WARNING: could not write the price cache ({error})")
 
 
 def cache_age_minutes(entry):
@@ -455,18 +467,18 @@ def get_prices(tickers, cache_path, force_refresh=False):
         except Exception as error:
             # Deliberately broad: network errors, Yahoo outages and yfinance's own
             # exceptions all mean the same thing here - carry on without this one.
-            print(f"WARNING: could not fetch {ticker} ({type(error).__name__}: {error})")
+            notice(f"WARNING: could not fetch {ticker} ({type(error).__name__}: {error})")
             quote = None
 
         if quote is None:
-            print(f"WARNING: no price data for {ticker}. Check the symbol resolves "
+            notice(f"WARNING: no price data for {ticker}. Check the symbol resolves "
                   f"on finance.yahoo.com (NSE symbols need the '.NS' suffix), or "
                   f"give the row a manual_value in holdings.csv.")
             # Fall back to a stale cached price rather than dropping the holding.
             if entry:
                 age_hours = cache_age_minutes(entry) / 60.0
-                print(f"         using the last cached price for {ticker} "
-                      f"({age_hours:.1f} hours old)")
+                notice(f"         using the last cached price for {ticker} "
+                       f"({age_hours:.1f} hours old)")
                 prices[ticker] = {"price": entry["price"], "as_of": entry.get("as_of")}
                 served_stale += 1
             continue
@@ -530,7 +542,7 @@ def build_positions(holdings, sectors, prices):
 
         mapping = sectors.get(ticker)
         if mapping is None:
-            print(f"WARNING: {ticker} is not listed in sectors.csv - counting it as "
+            notice(f"WARNING: {ticker} is not listed in sectors.csv - counting it as "
                   f"{UNKNOWN_SECTOR}/{UNKNOWN_ASSET_CLASS}. Add a row to fix this.")
             mapping = {"asset_class": UNKNOWN_ASSET_CLASS,
                        "weights": {UNKNOWN_SECTOR: 1.0}}
@@ -816,10 +828,121 @@ def build_json(positions, totals, sector_rows, asset_rows, warnings, unpriced,
     }
 
 
+
+# =============================================================================
+# SECTION 6b: WRITING THE CSV FILES BACK
+# Only the web app uses these - the command-line tool never modifies your files.
+# =============================================================================
+
+def csv_number(value):
+    """Render a number for a CSV cell without an ugly trailing '.0'."""
+    if value is None:
+        return ""
+    number = float(value)
+    if number.is_integer():
+        return str(int(number))
+    # Trim trailing zeros so 1337.50 is written as 1337.5, not 1337.5000.
+    return f"{number:.4f}".rstrip("0").rstrip(".")
+
+
+def read_comment_header(path):
+    """Return the '#' comment block at the top of a file, so rewriting keeps it.
+
+    These files are meant to stay hand-editable, and the explanation at the top
+    is most of what makes them so. Anything the user has written up there is
+    preserved when the web app saves. Comments further down, between data rows,
+    are not - there is no sensible way to know which row they belonged to.
+    """
+    if not os.path.exists(path):
+        return []
+
+    header = []
+    with open(path, encoding="utf-8-sig") as handle:
+        for line in handle:
+            stripped = line.strip()
+            if stripped.startswith("#"):
+                header.append(line.rstrip("\n"))
+            elif stripped == "":
+                if header:            # keep blank lines inside the block
+                    header.append("")
+            else:
+                break                 # first real row - the header block is over
+    return header
+
+
+def save_holdings(path, holdings):
+    """Write holdings back to CSV, keeping the explanatory header intact."""
+    header = read_comment_header(path)
+    with open(path, "w", newline="", encoding="utf-8") as handle:
+        for line in header:
+            handle.write(line + "\n")
+        writer = csv.writer(handle)
+        writer.writerow(["ticker", "quantity", "avg_buy_price", "account",
+                         "manual_value"])
+        for row in holdings:
+            writer.writerow([
+                row["ticker"],
+                csv_number(row["quantity"]),
+                csv_number(row["avg_buy_price"]),
+                row.get("account", ""),
+                csv_number(row.get("manual_value")),
+            ])
+
+
+def save_sectors(path, rows):
+    """Write the sector map back to CSV as one row per (ticker, sector) pair."""
+    header = read_comment_header(path)
+    with open(path, "w", newline="", encoding="utf-8") as handle:
+        for line in header:
+            handle.write(line + "\n")
+        writer = csv.writer(handle)
+        writer.writerow(["ticker", "sector", "weight", "asset_class"])
+        for row in rows:
+            writer.writerow([
+                row["ticker"],
+                row["sector"],
+                csv_number(row["weight"]),
+                row["asset_class"],
+            ])
+
+
 # =============================================================================
 # SECTION 7: ENTRY POINT
 # Wires the sections above together in order: load -> price -> analyse -> print.
 # =============================================================================
+
+def run_analysis(holdings_path=None, sectors_path=None, force_refresh=False):
+    """Load, price and analyse a portfolio; return the whole result as a dict.
+
+    This is the seam between the calculations and whatever is displaying them.
+    Both the command-line report and the web app call this and then render what
+    comes back, so the two can never drift apart or disagree about a number.
+    """
+    NOTICES.clear()
+
+    holdings = load_holdings(holdings_path or HOLDINGS_FILE)
+    sectors = load_sectors(sectors_path or SECTORS_FILE)
+
+    # Rows carrying a manual_value are already priced; asking Yahoo about a
+    # mutual fund would only fail.
+    tickers_to_fetch = [h["ticker"] for h in holdings if h["manual_value"] is None]
+    prices, cache_stats = get_prices(tickers_to_fetch, CACHE_FILE,
+                                     force_refresh=force_refresh)
+
+    positions, unpriced = build_positions(holdings, sectors, prices)
+    if not positions:
+        return None
+
+    totals = summarise_totals(positions)
+    sector_rows = breakdown_by_sector(positions, totals["total_value"])
+    asset_rows = breakdown_by_asset_class(positions, totals["total_value"])
+    warnings = find_warnings(positions, sector_rows, totals["total_value"])
+
+    result = build_json(positions, totals, sector_rows, asset_rows, warnings,
+                        unpriced, cache_stats)
+    result["notices"] = list(NOTICES)
+    return result
+
 
 def main():
     parser = argparse.ArgumentParser(
@@ -841,37 +964,18 @@ def main():
         original_stdout = sys.stdout
         sys.stdout = sys.stderr
 
-    # 1. Load the two files you maintain.
-    holdings = load_holdings(args.holdings)
-    sectors = load_sectors(args.sectors)
-
-    # 2. Fetch prices, but only for rows that need one (rows with a manual_value
-    #    are already priced, and asking Yahoo about a mutual fund would just fail).
-    tickers_to_fetch = [h["ticker"] for h in holdings if h["manual_value"] is None]
-    prices, cache_stats = get_prices(tickers_to_fetch, CACHE_FILE,
-                                     force_refresh=args.refresh)
-
-    # 3. Crunch the numbers.
-    positions, unpriced = build_positions(holdings, sectors, prices)
-    if not positions:
+    # All the real work happens here; everything below is just display.
+    result = run_analysis(args.holdings, args.sectors, force_refresh=args.refresh)
+    if result is None:
         sys.exit("ERROR: no holdings could be priced, so there is nothing to report")
 
-    totals = summarise_totals(positions)
-    sector_rows = breakdown_by_sector(positions, totals["total_value"])
-    asset_rows = breakdown_by_asset_class(positions, totals["total_value"])
-    warnings = find_warnings(positions, sector_rows, totals["total_value"])
-
-    # 4. Show the result.
     if args.as_json:
         sys.stdout = original_stdout
-        print(json.dumps(
-            build_json(positions, totals, sector_rows, asset_rows, warnings,
-                       unpriced, cache_stats),
-            indent=2,
-        ))
+        print(json.dumps(result, indent=2))
     else:
-        print_report(positions, totals, sector_rows, asset_rows, warnings,
-                     unpriced, cache_stats)
+        print_report(result["positions"], result["totals"], result["by_sector"],
+                     result["by_asset_class"], result["warnings"],
+                     result["unpriced_tickers"], result["price_source_counts"])
 
 
 if __name__ == "__main__":
