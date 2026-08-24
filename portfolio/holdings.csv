@@ -13,7 +13,11 @@
 #               fetch a price. Leave it empty for anything Yahoo can price.
 ticker,quantity,avg_buy_price,account,manual_value
 MCX.NS,3,2721.00,equity,
-RAINBOWHSP.NS,4,1337.50,equity,
+# NOTE: RAINBOWHSP.NS returns a 404 from Yahoo - that symbol does not exist
+# there. RAINBOW.NS is the likely correct one for Rainbow Children's
+# Medicare, but it is UNVERIFIED. Confirm it by searching the company name
+# on finance.yahoo.com and using whatever symbol the result page shows.
+RAINBOW.NS,4,1337.50,equity,
 ZYDUSLIFE.NS,4,1133.55,equity,
 TATAGOLD.NS,199,14.63,equity,
 SILVERBEES.NS,8,228.98,equity,

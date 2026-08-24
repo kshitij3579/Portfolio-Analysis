@@ -26,6 +26,7 @@ Usage
 import argparse
 import csv
 import json
+import math
 import os
 import sys
 from datetime import datetime, timezone
@@ -66,9 +67,12 @@ CACHE_TTL_MINUTES = 60
 UNKNOWN_SECTOR = "Unknown"
 UNKNOWN_ASSET_CLASS = "other"
 
-# How many days of price history to request. We only want the most recent close,
-# but asking for a few days means weekends and market holidays still return data.
+# How much price history to request. We only want the most recent close, but
+# asking for a few days means weekends and market holidays still return data.
 PRICE_HISTORY_DAYS = "5d"
+# If that short window contains no usable price at all - a long holiday, or a
+# thinly traded ETF - try again over a wider one before giving up.
+PRICE_HISTORY_FALLBACK = "1mo"
 
 
 # =============================================================================
@@ -83,6 +87,11 @@ def format_inr(amount):
     are one group, and everything before that is grouped in PAIRS.
     1234567.89 becomes  Rs 12,34,567.89  (not 1,234,567.89).
     """
+    # Guard against nan/inf reaching the formatter. It should never happen now
+    # that prices are validated, but printing "n/a" beats printing "Rs nan."
+    if not math.isfinite(amount):
+        return "n/a"
+
     is_negative = amount < 0
     whole, _, decimals = f"{abs(amount):.2f}".partition(".")
 
@@ -238,6 +247,18 @@ def load_holdings(path):
             print(f"WARNING: skipping {ticker} - quantity or avg_buy_price is "
                   f"missing or not a number")
             continue
+        if not math.isfinite(quantity) or not math.isfinite(avg_buy_price):
+            print(f"WARNING: skipping {ticker} - quantity or avg_buy_price is "
+                  f"not a usable number")
+            continue
+
+        # A manual_value that is not a sensible positive number would poison every
+        # total it entered, so reject it and fall back to fetching a price.
+        manual_value = parse_number(row.get("manual_value"))
+        if manual_value is not None and not is_usable_price(manual_value):
+            print(f"WARNING: ignoring the manual_value on {ticker} - "
+                  f"'{row.get('manual_value')}' is not a positive number")
+            manual_value = None
 
         holdings.append({
             "ticker": ticker,
@@ -245,7 +266,7 @@ def load_holdings(path):
             "avg_buy_price": avg_buy_price,
             "account": (row.get("account") or "").strip(),
             # None here means "please fetch a live price for this one".
-            "manual_value": parse_number(row.get("manual_value")),
+            "manual_value": manual_value,
         })
 
     if not holdings:
@@ -313,6 +334,21 @@ def load_sectors(path):
 # The only part of this program that touches the network.
 # =============================================================================
 
+def is_usable_price(value):
+    """True only for a real, finite, positive number.
+
+    Yahoo can hand back a blank (nan) price, and a blank that is allowed through
+    silently poisons every sum it touches: nan plus anything is nan, so one bad
+    price turns the whole report into "nan". Everything entering the program as a
+    price goes through this check first.
+    """
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return False
+    return math.isfinite(number) and number > 0
+
+
 def load_cache(path):
     """Read the price cache. Any problem returns an empty cache - never crashes."""
     if not os.path.exists(path):
@@ -351,10 +387,26 @@ def fetch_one_price(ticker):
     """
     import yfinance as yf
 
-    history = yf.Ticker(ticker).history(period=PRICE_HISTORY_DAYS)
-    if history.empty or "Close" not in history:
-        return None
-    return float(history["Close"].iloc[-1])
+    stock = yf.Ticker(ticker)
+
+    for period in (PRICE_HISTORY_DAYS, PRICE_HISTORY_FALLBACK):
+        history = stock.history(period=period)
+        if history.empty or "Close" not in history:
+            continue
+
+        # Yahoo often includes a row for a session that has not produced a close
+        # yet - the date is there but the price cell is blank (nan). Taking the
+        # last row blindly picks up that blank. dropna() discards those rows so
+        # we take the most recent row that actually has a price in it.
+        closes = history["Close"].dropna()
+        if closes.empty:
+            continue   # nothing usable in this window; try the wider one
+
+        price = float(closes.iloc[-1])
+        if is_usable_price(price):
+            return price
+
+    return None
 
 
 def get_prices(tickers, cache_path, force_refresh=False):
@@ -372,6 +424,12 @@ def get_prices(tickers, cache_path, force_refresh=False):
 
     for ticker in tickers:
         entry = cache.get(ticker)
+        # An entry written before prices were validated may hold a blank. Treat
+        # any unusable cached price as if it were not there, so the bad value is
+        # re-fetched rather than reused.
+        if entry and not is_usable_price(entry.get("price")):
+            entry = None
+
         if entry and not force_refresh and cache_age_minutes(entry) < CACHE_TTL_MINUTES:
             prices[ticker] = entry["price"]
             served_from_cache += 1

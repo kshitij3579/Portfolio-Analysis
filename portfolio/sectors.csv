@@ -26,7 +26,7 @@ ticker,sector,weight,asset_class
 MCX.NS,Precious Metals,0.5,equity
 MCX.NS,Financials,0.5,equity
 
-RAINBOWHSP.NS,Healthcare,1.0,equity
+RAINBOW.NS,Healthcare,1.0,equity
 ZYDUSLIFE.NS,Pharmaceuticals,1.0,equity
 
 # Gold and silver ETFs - pure bullion, one sector each.
